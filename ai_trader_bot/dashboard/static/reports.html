@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reports</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">Reporting Center</div>
+      <div class="meta">All reports are dashboard-first (no email delivery)</div>
+    </header>
+
+    <nav class="nav">
+      <a href="/portfolio">Portfolio</a>
+      <a href="/research">Research Feed</a>
+      <a class="active" href="/reports">Reports</a>
+      <a href="/todo">To-Do</a>
+      <a href="/logs">System Logs</a>
+      <a href="/control">Control Center</a>
+    </nav>
+
+    <section class="card">
+      <div class="subtabs">
+        <button class="subtab active" data-type="daily">Daily</button>
+        <button class="subtab" data-type="weekly">Weekly</button>
+        <button class="subtab" data-type="quarterly">Quarterly Advisor</button>
+        <button class="subtab" data-type="roadmap">Roadmap Advisor</button>
+        <button class="subtab" data-type="bootstrap">Bootstrap Optimization</button>
+      </div>
+      <div class="items" id="reports-list"></div>
+    </section>
+  </main>
+  <script src="/static/reports.js"></script>
+</body>
+</html>

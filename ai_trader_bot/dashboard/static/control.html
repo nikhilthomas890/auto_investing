@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Control Center</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">Control Center</div>
+      <div class="meta" id="control-meta">Submit runtime decisions and apply them from dashboard</div>
+    </header>
+
+    <nav class="nav">
+      <a href="/portfolio">Portfolio</a>
+      <a href="/research">Research Feed</a>
+      <a href="/reports">Reports</a>
+      <a href="/todo">To-Do</a>
+      <a href="/logs">System Logs</a>
+      <a class="active" href="/control">Control Center</a>
+    </nav>
+
+    <section class="grid-2">
+      <article class="card">
+        <h2>Set Runtime Value</h2>
+        <div class="form-grid">
+          <label class="label" for="config-key">Config key</label>
+          <select class="input" id="config-key"></select>
+          <label class="label" for="config-value">Value</label>
+          <input class="input" id="config-value" type="text" placeholder="Enter value" />
+          <button class="btn btn-primary" id="set-config-btn" type="button">Apply Value</button>
+        </div>
+        <p class="meta" id="config-key-meta" style="margin-top:8px;">Loading configurable keys…</p>
+      </article>
+
+      <article class="card">
+        <h2>Runtime Actions</h2>
+        <div class="row">
+          <button class="btn btn-primary" id="restart-btn" type="button">Request Runtime Restart</button>
+          <button class="btn btn-primary" id="redeploy-btn" type="button">Request Code Redeploy</button>
+        </div>
+        <p class="meta" style="margin-top:10px;">
+          Restart/redeploy requests are recorded as control actions and can be picked up by your runtime/deployment process.
+        </p>
+      </article>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2>New Model Build Request</h2>
+      <div class="form-grid form-grid-3">
+        <label class="label" for="model-name">Model name</label>
+        <input class="input" id="model-name" type="text" placeholder="example: policy-regime-shift-model" />
+        <label class="label" for="model-quarter">Target quarter</label>
+        <input class="input" id="model-quarter" type="text" placeholder="example: 2026-Q3" />
+      </div>
+      <label class="label" for="model-rationale" style="margin-top:8px;">Rationale</label>
+      <textarea class="input" id="model-rationale" rows="3" placeholder="Why this model should be built"></textarea>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" id="model-request-btn" type="button">Submit Model Request</button>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2>Active Runtime Overrides</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>Value</th></tr></thead>
+          <tbody id="overrides-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid-2" style="margin-top:16px;">
+      <article class="card">
+        <h2>Submitted Actions</h2>
+        <div class="items" id="actions-list"></div>
+      </article>
+      <article class="card">
+        <h2>Applied Results</h2>
+        <div class="items" id="results-list"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/static/control.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Implementation To-Do</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">Implementation To-Do</div>
+      <div class="meta" id="todo-meta">Loading roadmap…</div>
+    </header>
+
+    <nav class="nav">
+      <a href="/portfolio">Portfolio</a>
+      <a href="/research">Research Feed</a>
+      <a href="/reports">Reports</a>
+      <a class="active" href="/todo">To-Do</a>
+      <a href="/logs">System Logs</a>
+      <a href="/control">Control Center</a>
+    </nav>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+        <h2 style="margin:0;">Future Implementations and Improvements</h2>
+        <span class="badge" id="todo-count">0 items</span>
+      </div>
+      <div class="items" id="todo-items"></div>
+    </section>
+  </main>
+
+  <script src="/static/todo.js"></script>
+</body>
+</html>
