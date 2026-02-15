@@ -29,6 +29,7 @@ WEEKDAY_INDEX = {
 class ReportState:
     last_daily_report_date: str = ""
     last_weekly_report_key: str = ""
+    last_layer_reevaluation_week_key: str = ""
     last_quarterly_advisor_target: str = ""
     last_model_roadmap_target: str = ""
     last_bootstrap_optimization_date: str = ""
@@ -47,6 +48,7 @@ class ReportManager:
         self.quarterly_advisor_path = Path(config.quarterly_model_advisor_log_path)
         self.model_roadmap_path = Path(config.model_roadmap_log_path)
         self.bootstrap_optimization_path = Path(config.bootstrap_optimization_log_path)
+        self.layer_reevaluation_path = Path(config.layer_reevaluation_log_path)
         self.decision_journal_path = Path(config.decision_journal_path)
         self.report_tz = self._resolve_timezone(config.report_timezone)
 
@@ -76,6 +78,7 @@ class ReportManager:
         return ReportState(
             last_daily_report_date=str(payload.get("last_daily_report_date") or ""),
             last_weekly_report_key=str(payload.get("last_weekly_report_key") or ""),
+            last_layer_reevaluation_week_key=str(payload.get("last_layer_reevaluation_week_key") or ""),
             last_quarterly_advisor_target=str(payload.get("last_quarterly_advisor_target") or ""),
             last_model_roadmap_target=str(payload.get("last_model_roadmap_target") or ""),
             last_bootstrap_optimization_date=str(payload.get("last_bootstrap_optimization_date") or ""),
@@ -85,6 +88,7 @@ class ReportManager:
         payload = {
             "last_daily_report_date": self.state.last_daily_report_date,
             "last_weekly_report_key": self.state.last_weekly_report_key,
+            "last_layer_reevaluation_week_key": self.state.last_layer_reevaluation_week_key,
             "last_quarterly_advisor_target": self.state.last_quarterly_advisor_target,
             "last_model_roadmap_target": self.state.last_model_roadmap_target,
             "last_bootstrap_optimization_date": self.state.last_bootstrap_optimization_date,
@@ -266,6 +270,7 @@ class ReportManager:
     def maybe_send_scheduled_reports(self, *, now: datetime | None = None) -> None:
         current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         self._maybe_send_bootstrap_optimization(current)
+        self._maybe_send_layer_reevaluation(current)
         self._maybe_send_quarterly_advisor(current)
         self._maybe_send_model_roadmap_advisor(current)
 
@@ -662,6 +667,54 @@ class ReportManager:
         self.state.last_weekly_report_key = week_key
         self._save_state()
 
+    def _maybe_send_layer_reevaluation(self, now: datetime) -> None:
+        if not self.config.enable_layer_reevaluation_reports:
+            return
+
+        now_local = now.astimezone(self.report_tz)
+        if now_local.hour < self.config.weekly_report_hour_local:
+            return
+
+        target_day = WEEKDAY_INDEX.get(self.config.weekly_report_day_local.upper(), 4)
+        report_date = now_local.date()
+        if self.config.send_reports_market_days_only and not is_us_equity_market_day(report_date):
+            return
+
+        send_day = self._weekly_send_day_for_week(report_date, target_day)
+        if send_day is None or report_date != send_day:
+            return
+
+        iso = report_date.isocalendar()
+        week_key = f"{iso.year}-W{iso.week:02d}"
+        if self.state.last_layer_reevaluation_week_key == week_key:
+            return
+
+        payload = self.build_layer_reevaluation_payload(report_date)
+        if payload is None:
+            return
+
+        self._append_jsonl(
+            self.layer_reevaluation_path,
+            {
+                "event": "layer_reevaluation_report",
+                "timestamp": now.isoformat(),
+                "week_key": week_key,
+                "range_end": report_date.isoformat(),
+                "subject": payload["subject"],
+                "body": payload["body"],
+                "metrics": payload["metrics"],
+                "comparison": payload["comparison"],
+                "recommendations": payload["recommendations"],
+            },
+        )
+        logging.info(
+            "Layer reevaluation report generated for %s; stored at %s",
+            week_key,
+            self.layer_reevaluation_path,
+        )
+        self.state.last_layer_reevaluation_week_key = week_key
+        self._save_state()
+
     def _weekly_send_day_for_week(self, current_day: date, target_day_idx: int) -> date | None:
         week_start = current_day - timedelta(days=current_day.weekday())
         target_day = week_start + timedelta(days=target_day_idx)
@@ -924,6 +977,522 @@ class ReportManager:
 
         body = "\n".join(lines).strip() + "\n"
         return subject, body
+
+    def _evaluate_layer_window(
+        self,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> dict[str, Any] | None:
+        snapshots = [
+            event
+            for event in self._read_jsonl(self.portfolio_path)
+            if self._event_date_in_range(event, start_date, end_date)
+        ]
+        metadata_events = [
+            event
+            for event in self._read_jsonl(self.metadata_path)
+            if self._event_date_in_range(event, start_date, end_date)
+        ]
+        journal = [
+            event
+            for event in self._read_jsonl(self.decision_journal_path)
+            if self._event_date_in_range(event, start_date, end_date)
+        ]
+        if not snapshots and not metadata_events and not journal:
+            return None
+
+        if snapshots:
+            equity_series = [float(event.get("account_equity", 0.0) or 0.0) for event in snapshots]
+            start_equity = equity_series[0]
+            end_equity = equity_series[-1]
+            running_peak = equity_series[0]
+            max_drawdown = 0.0
+            for value in equity_series:
+                running_peak = max(running_peak, value)
+                if running_peak > 0:
+                    max_drawdown = max(max_drawdown, (running_peak - value) / running_peak)
+        else:
+            start_equity = float(self.config.starting_capital)
+            end_equity = start_equity
+            max_drawdown = 0.0
+        week_return_pct = ((end_equity / start_equity) - 1.0) if start_equity > 0 else 0.0
+
+        trade_cycles = [event for event in metadata_events if bool(event.get("execute_orders", False))]
+        no_trade_cycles = sum(1 for event in trade_cycles if int(event.get("orders_proposed", 0) or 0) == 0)
+        no_trade_ratio = (no_trade_cycles / len(trade_cycles)) if trade_cycles else None
+
+        llm_enabled_cycles = 0
+        llm_plan_generated = 0
+        llm_plan_used = 0
+        llm_confidences: list[float] = []
+        for event in metadata_events:
+            decision = event.get("decision_metadata")
+            if not isinstance(decision, dict):
+                continue
+            if bool(decision.get("llm_first_enabled", False)):
+                llm_enabled_cycles += 1
+            if bool(decision.get("llm_plan_generated", False)):
+                llm_plan_generated += 1
+                confidence_raw = decision.get("llm_plan_confidence")
+                if isinstance(confidence_raw, (int, float)):
+                    llm_confidences.append(float(confidence_raw))
+            if bool(decision.get("llm_plan_used", False)):
+                llm_plan_used += 1
+
+        avg_llm_confidence = (
+            sum(llm_confidences) / len(llm_confidences)
+            if llm_confidences
+            else None
+        )
+        llm_low_confidence_count = sum(
+            1 for value in llm_confidences if value < float(self.config.llm_first_min_confidence)
+        )
+        llm_low_confidence_rate = (
+            llm_low_confidence_count / len(llm_confidences)
+            if llm_confidences
+            else None
+        )
+        llm_usage_rate = (
+            llm_plan_used / llm_plan_generated
+            if llm_plan_generated > 0
+            else None
+        )
+        llm_fallback_rate = (
+            (llm_plan_generated - llm_plan_used) / llm_plan_generated
+            if llm_plan_generated > 0
+            else None
+        )
+
+        resolved = [
+            event
+            for event in journal
+            if event.get("event") == "decision_call_resolved"
+            and str(event.get("outcome") or "") in {"good_call", "bad_call"}
+        ]
+        good_calls = sum(1 for event in resolved if event.get("outcome") == "good_call")
+        bad_calls = [event for event in resolved if event.get("outcome") == "bad_call"]
+        bad_call_rate = (len(bad_calls) / len(resolved)) if resolved else None
+
+        tag_counts: dict[str, int] = defaultdict(int)
+        for event in bad_calls:
+            tags = event.get("why_bad")
+            if not isinstance(tags, list):
+                continue
+            for tag in tags:
+                name = str(tag).strip()
+                if name:
+                    tag_counts[name] += 1
+
+        return {
+            "evaluation_start": start_date.isoformat(),
+            "evaluation_end": end_date.isoformat(),
+            "start_equity": start_equity,
+            "end_equity": end_equity,
+            "week_return_pct": week_return_pct,
+            "max_drawdown_pct": max_drawdown,
+            "cycles": len(metadata_events),
+            "trade_cycles": len(trade_cycles),
+            "no_trade_cycles": no_trade_cycles,
+            "no_trade_ratio": no_trade_ratio,
+            "llm_enabled_cycles": llm_enabled_cycles,
+            "llm_plan_generated": llm_plan_generated,
+            "llm_plan_used": llm_plan_used,
+            "llm_usage_rate": llm_usage_rate,
+            "llm_fallback_rate": llm_fallback_rate,
+            "avg_llm_plan_confidence": avg_llm_confidence,
+            "llm_low_confidence_count": llm_low_confidence_count,
+            "llm_low_confidence_rate": llm_low_confidence_rate,
+            "resolved_calls": len(resolved),
+            "good_calls": good_calls,
+            "bad_calls": len(bad_calls),
+            "bad_call_rate": bad_call_rate,
+            "tag_counts": dict(tag_counts),
+        }
+
+    def _recommend_layer_strengths(self, *, metrics: dict[str, Any]) -> list[dict[str, Any]]:
+        sample_gate_active = (
+            int(metrics.get("resolved_calls", 0) or 0) < 6
+            and int(metrics.get("llm_plan_generated", 0) or 0) < 6
+        )
+
+        current = {
+            "llm_first_min_confidence": float(self.config.llm_first_min_confidence),
+            "ai_feedback_strength": float(self.config.ai_feedback_strength),
+            "decision_learning_rate": float(self.config.decision_learning_rate),
+            "source_priority_learning_rate": float(self.config.source_priority_learning_rate),
+            "historical_research_weight": float(self.config.historical_research_weight),
+            "historical_research_feedback_strength": float(self.config.historical_research_feedback_strength),
+        }
+        recommended = dict(current)
+        reasons = {key: "Kept stable: metrics are mixed this week." for key in current}
+
+        week_return = float(metrics.get("week_return_pct", 0.0) or 0.0)
+        max_drawdown = float(metrics.get("max_drawdown_pct", 0.0) or 0.0)
+        no_trade_ratio = (
+            float(metrics["no_trade_ratio"])
+            if isinstance(metrics.get("no_trade_ratio"), (int, float))
+            else None
+        )
+        bad_call_rate = (
+            float(metrics["bad_call_rate"])
+            if isinstance(metrics.get("bad_call_rate"), (int, float))
+            else None
+        )
+        llm_low_conf_rate = (
+            float(metrics["llm_low_confidence_rate"])
+            if isinstance(metrics.get("llm_low_confidence_rate"), (int, float))
+            else None
+        )
+        llm_generated = int(metrics.get("llm_plan_generated", 0) or 0)
+
+        if sample_gate_active:
+            for key in reasons:
+                reasons[key] = (
+                    "Insufficient weekly samples for safe adjustment (need >=6 resolved calls or >=6 generated LLM plans)."
+                )
+        else:
+            drawdown_limit = self._clamp(float(self.config.quarterly_goal_max_drawdown_pct), 0.0, 1.0)
+            risk_stress = max_drawdown > drawdown_limit or (
+                bad_call_rate is not None and bad_call_rate >= 0.60
+            )
+            stable_week = (
+                week_return >= 0.02
+                and max_drawdown <= max(0.02, drawdown_limit * 0.75)
+                and (bad_call_rate is None or bad_call_rate <= 0.45)
+            )
+
+            if risk_stress:
+                recommended["llm_first_min_confidence"] = self._clamp(
+                    recommended["llm_first_min_confidence"] + 0.03,
+                    0.25,
+                    0.85,
+                )
+                reasons["llm_first_min_confidence"] = (
+                    "Raised confidence gate after elevated drawdown/bad-call risk."
+                )
+                recommended["ai_feedback_strength"] = self._clamp(
+                    recommended["ai_feedback_strength"] + 0.01,
+                    0.02,
+                    0.25,
+                )
+                reasons["ai_feedback_strength"] = (
+                    "Increased to adapt AI thesis memory faster after wrong-way moves."
+                )
+                recommended["decision_learning_rate"] = self._clamp(
+                    recommended["decision_learning_rate"] - 0.01,
+                    0.03,
+                    0.20,
+                )
+                reasons["decision_learning_rate"] = (
+                    "Reduced to avoid over-adjusting penalties during stressed conditions."
+                )
+                recommended["source_priority_learning_rate"] = self._clamp(
+                    recommended["source_priority_learning_rate"] - 0.01,
+                    0.03,
+                    0.20,
+                )
+                reasons["source_priority_learning_rate"] = (
+                    "Reduced to prevent rapid source-weight swings under stress."
+                )
+                recommended["historical_research_weight"] = self._clamp(
+                    recommended["historical_research_weight"] - 0.02,
+                    0.10,
+                    0.45,
+                )
+                reasons["historical_research_weight"] = (
+                    "Reduced to prioritize fresh context until stability improves."
+                )
+                recommended["historical_research_feedback_strength"] = self._clamp(
+                    recommended["historical_research_feedback_strength"] - 0.01,
+                    0.05,
+                    0.25,
+                )
+                reasons["historical_research_feedback_strength"] = (
+                    "Reduced slightly to avoid overfitting weekly noise."
+                )
+            elif stable_week:
+                recommended["llm_first_min_confidence"] = self._clamp(
+                    recommended["llm_first_min_confidence"] - 0.02,
+                    0.25,
+                    0.85,
+                )
+                reasons["llm_first_min_confidence"] = (
+                    "Lowered slightly to allow more LLM-driven candidates in stable conditions."
+                )
+                recommended["ai_feedback_strength"] = self._clamp(
+                    recommended["ai_feedback_strength"] + 0.005,
+                    0.02,
+                    0.25,
+                )
+                reasons["ai_feedback_strength"] = (
+                    "Raised slightly so long-term AI memory continues adapting with positive quality."
+                )
+                recommended["decision_learning_rate"] = self._clamp(
+                    recommended["decision_learning_rate"] + 0.01,
+                    0.03,
+                    0.20,
+                )
+                reasons["decision_learning_rate"] = (
+                    "Raised slightly to transfer useful cross-ticker lessons faster."
+                )
+                recommended["source_priority_learning_rate"] = self._clamp(
+                    recommended["source_priority_learning_rate"] + 0.01,
+                    0.03,
+                    0.20,
+                )
+                reasons["source_priority_learning_rate"] = (
+                    "Raised slightly to reinforce higher-quality source types."
+                )
+                recommended["historical_research_weight"] = self._clamp(
+                    recommended["historical_research_weight"] + 0.01,
+                    0.10,
+                    0.45,
+                )
+                reasons["historical_research_weight"] = (
+                    "Raised slightly to preserve useful historical context."
+                )
+                recommended["historical_research_feedback_strength"] = self._clamp(
+                    recommended["historical_research_feedback_strength"] + 0.01,
+                    0.05,
+                    0.25,
+                )
+                reasons["historical_research_feedback_strength"] = (
+                    "Raised slightly to speed event-impact learning."
+                )
+            else:
+                if no_trade_ratio is not None and no_trade_ratio > 0.80 and (
+                    bad_call_rate is None or bad_call_rate <= 0.55
+                ):
+                    recommended["llm_first_min_confidence"] = self._clamp(
+                        recommended["llm_first_min_confidence"] - 0.01,
+                        0.25,
+                        0.85,
+                    )
+                    reasons["llm_first_min_confidence"] = (
+                        "Lowered slightly because trade-capable cycles were mostly inactive."
+                    )
+                    recommended["decision_learning_rate"] = self._clamp(
+                        recommended["decision_learning_rate"] + 0.005,
+                        0.03,
+                        0.20,
+                    )
+                    reasons["decision_learning_rate"] = (
+                        "Raised slightly to increase adaptation speed in low-activity weeks."
+                    )
+                if bad_call_rate is not None and bad_call_rate > 0.50:
+                    recommended["llm_first_min_confidence"] = self._clamp(
+                        recommended["llm_first_min_confidence"] + 0.02,
+                        0.25,
+                        0.85,
+                    )
+                    reasons["llm_first_min_confidence"] = (
+                        "Raised because bad-call rate was elevated."
+                    )
+                    recommended["source_priority_learning_rate"] = self._clamp(
+                        recommended["source_priority_learning_rate"] - 0.005,
+                        0.03,
+                        0.20,
+                    )
+                    reasons["source_priority_learning_rate"] = (
+                        "Reduced slightly until source quality alignment improves."
+                    )
+                if llm_low_conf_rate is not None and llm_low_conf_rate > 0.65 and llm_generated >= 6:
+                    recommended["llm_first_min_confidence"] = self._clamp(
+                        recommended["llm_first_min_confidence"] + 0.01,
+                        0.25,
+                        0.85,
+                    )
+                    reasons["llm_first_min_confidence"] = (
+                        "Raised because most generated plans were below the confidence floor."
+                    )
+
+        layer_rows: list[dict[str, Any]] = [
+            {
+                "layer": "L0",
+                "layer_name": "Hard Guardrails",
+                "knob": "",
+                "env": "",
+                "current": None,
+                "recommended": None,
+                "changed": False,
+                "reason": "Non-tunable safety constraints. Never adjusted by learning reports.",
+            }
+        ]
+
+        knob_meta = [
+            ("L1", "LLM Trust Gate", "llm_first_min_confidence", "LLM_FIRST_MIN_CONFIDENCE"),
+            ("L2", "AI Thesis Memory", "ai_feedback_strength", "AI_FEEDBACK_STRENGTH"),
+            ("L3", "Cross-Ticker Learning", "decision_learning_rate", "DECISION_LEARNING_RATE"),
+            ("L3", "Cross-Ticker Learning", "source_priority_learning_rate", "SOURCE_PRIORITY_LEARNING_RATE"),
+            ("L3", "Cross-Ticker Learning", "historical_research_weight", "HISTORICAL_RESEARCH_WEIGHT"),
+            (
+                "L3",
+                "Cross-Ticker Learning",
+                "historical_research_feedback_strength",
+                "HISTORICAL_RESEARCH_FEEDBACK_STRENGTH",
+            ),
+        ]
+        for layer, layer_name, key, env in knob_meta:
+            current_value = round(float(current[key]), 3)
+            recommended_value = round(float(recommended[key]), 3)
+            layer_rows.append(
+                {
+                    "layer": layer,
+                    "layer_name": layer_name,
+                    "knob": key,
+                    "env": env,
+                    "current": current_value,
+                    "recommended": recommended_value,
+                    "changed": abs(recommended_value - current_value) >= 0.001,
+                    "reason": reasons[key],
+                }
+            )
+
+        layer_rows.append(
+            {
+                "layer": "L4",
+                "layer_name": "Execution Adaptation",
+                "knob": "",
+                "env": "",
+                "current": 0.0,
+                "recommended": 0.0,
+                "changed": False,
+                "reason": "Disabled until post-validation go-live. Keep execution adaptation at 0.0.",
+            }
+        )
+        return layer_rows
+
+    def build_layer_reevaluation_payload(self, end_date: date) -> dict[str, Any] | None:
+        start_date = end_date - timedelta(days=6)
+        metrics = self._evaluate_layer_window(start_date=start_date, end_date=end_date)
+        if metrics is None:
+            return None
+
+        recommendations = self._recommend_layer_strengths(metrics=metrics)
+        previous = self._latest_report_event(self.layer_reevaluation_path, "layer_reevaluation_report")
+        previous_metrics = (
+            previous.get("metrics")
+            if isinstance(previous, dict) and isinstance(previous.get("metrics"), dict)
+            else {}
+        )
+        comparison = {
+            "week_return_pct_delta": self._metric_delta(
+                float(metrics.get("week_return_pct", 0.0) or 0.0),
+                previous_metrics.get("week_return_pct"),
+            ),
+            "max_drawdown_pct_delta": self._metric_delta(
+                float(metrics.get("max_drawdown_pct", 0.0) or 0.0),
+                previous_metrics.get("max_drawdown_pct"),
+            ),
+            "bad_call_rate_delta": self._metric_delta(
+                (
+                    float(metrics["bad_call_rate"])
+                    if isinstance(metrics.get("bad_call_rate"), (int, float))
+                    else 0.0
+                ),
+                previous_metrics.get("bad_call_rate"),
+            ),
+            "llm_usage_rate_delta": self._metric_delta(
+                (
+                    float(metrics["llm_usage_rate"])
+                    if isinstance(metrics.get("llm_usage_rate"), (int, float))
+                    else 0.0
+                ),
+                previous_metrics.get("llm_usage_rate"),
+            ),
+            "no_trade_ratio_delta": self._metric_delta(
+                (
+                    float(metrics["no_trade_ratio"])
+                    if isinstance(metrics.get("no_trade_ratio"), (int, float))
+                    else 0.0
+                ),
+                previous_metrics.get("no_trade_ratio"),
+            ),
+        }
+
+        prefix = self.config.report_subject_prefix.strip() or "AI Trader"
+        subject = (
+            f"[{prefix}] Layer Reevaluation Report - "
+            f"{start_date.isoformat()} to {end_date.isoformat()}"
+        )
+
+        lines: list[str] = []
+        lines.append(
+            f"Layer reevaluation for {start_date.isoformat()} through {end_date.isoformat()} (report timezone)."
+        )
+        lines.append(
+            "Policy: bounded adjustments only, one review window at a time, and no automatic changes to hard guardrails."
+        )
+        lines.append("")
+        lines.append("Observed performance:")
+        lines.append(
+            f"- Equity: ${float(metrics['start_equity']):,.2f} -> ${float(metrics['end_equity']):,.2f} "
+            f"({float(metrics['week_return_pct']) * 100:+.2f}%)"
+        )
+        lines.append(f"- Max drawdown: {float(metrics['max_drawdown_pct']) * 100:.2f}%")
+        lines.append(
+            f"- Resolved calls: {int(metrics['resolved_calls'])} "
+            f"(good={int(metrics['good_calls'])}, bad={int(metrics['bad_calls'])}"
+            + (
+                f", bad rate={float(metrics['bad_call_rate']) * 100:.1f}%"
+                if isinstance(metrics.get("bad_call_rate"), (int, float))
+                else ""
+            )
+            + ")"
+        )
+        lines.append(
+            f"- LLM plans: generated={int(metrics['llm_plan_generated'])}, used={int(metrics['llm_plan_used'])}"
+            + (
+                f", usage rate={float(metrics['llm_usage_rate']) * 100:.1f}%"
+                if isinstance(metrics.get("llm_usage_rate"), (int, float))
+                else ""
+            )
+            + (
+                f", avg confidence={float(metrics['avg_llm_plan_confidence']):.3f}"
+                if isinstance(metrics.get("avg_llm_plan_confidence"), (int, float))
+                else ""
+            )
+        )
+        if isinstance(metrics.get("no_trade_ratio"), (int, float)):
+            lines.append(
+                f"- Trade-capable no-order cycles: {int(metrics['no_trade_cycles'])}/{int(metrics['trade_cycles'])} "
+                f"({float(metrics['no_trade_ratio']) * 100:.1f}%)"
+            )
+        lines.append("")
+        lines.append("Week-over-week deltas:")
+        lines.append(
+            f"- Return delta: {comparison['week_return_pct_delta']:+.4f}, "
+            f"drawdown delta: {comparison['max_drawdown_pct_delta']:+.4f}, "
+            f"bad-call delta: {comparison['bad_call_rate_delta']:+.4f}, "
+            f"LLM usage delta: {comparison['llm_usage_rate_delta']:+.4f}, "
+            f"no-trade delta: {comparison['no_trade_ratio_delta']:+.4f}"
+        )
+        lines.append("")
+        lines.append("Layer strength recommendations:")
+        for row in recommendations:
+            layer = str(row.get("layer") or "")
+            label = str(row.get("layer_name") or "")
+            knob = str(row.get("knob") or "")
+            env = str(row.get("env") or "")
+            reason = str(row.get("reason") or "")
+            if not knob:
+                lines.append(f"- [LOCKED] {layer} {label}: {reason}")
+                continue
+            marker = "CHANGE" if bool(row.get("changed")) else "KEEP"
+            lines.append(
+                f"- [{marker}] {layer} {label} | {env}: "
+                f"{float(row['current']):.3f} -> {float(row['recommended']):.3f}. {reason}"
+            )
+
+        body = "\n".join(lines).strip() + "\n"
+        return {
+            "subject": subject,
+            "body": body,
+            "metrics": metrics,
+            "comparison": comparison,
+            "recommendations": recommendations,
+        }
 
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:

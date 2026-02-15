@@ -25,6 +25,7 @@ class ReportingTests(unittest.TestCase):
             quarterly_model_advisor_log_path=str(base / "quarterly_model_advisor.jsonl"),
             model_roadmap_log_path=str(base / "model_roadmap_advisor.jsonl"),
             bootstrap_optimization_log_path=str(base / "bootstrap_optimization_report.jsonl"),
+            layer_reevaluation_log_path=str(base / "layer_reevaluation_report.jsonl"),
             decision_journal_path=str(base / "decision_journal.jsonl"),
             decision_learning_state_path=str(base / "decision_state.json"),
         )
@@ -326,6 +327,64 @@ class ReportingTests(unittest.TestCase):
             ]
             self.assertEqual(len(research_rows), 1)
             self.assertEqual(research_rows[0].get("event"), "research_item")
+
+    def test_layer_reevaluation_report_is_generated_with_recommendations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = self._config(tmp_dir)
+            config.weekly_report_day_local = "FRI"
+            config.weekly_report_hour_local = 18
+            manager = ReportManager(config)
+
+            for ts, equity in (
+                (datetime(2026, 2, 14, 18, 0, tzinfo=timezone.utc), 1000.0),
+                (datetime(2026, 2, 15, 18, 0, tzinfo=timezone.utc), 995.0),
+                (datetime(2026, 2, 16, 18, 0, tzinfo=timezone.utc), 1008.0),
+            ):
+                summary = {
+                    "cash": equity * 0.5,
+                    "account_equity": equity,
+                    "equity_positions": {"NVDA": 1},
+                    "option_positions": {},
+                    "orders": [],
+                    "signal_map": {},
+                    "execute_orders": True,
+                    "decision_metadata": {
+                        "signals_generated": 2,
+                        "orders_proposed": 0,
+                        "llm_first_enabled": True,
+                        "llm_plan_generated": True,
+                        "llm_plan_used": False,
+                        "llm_plan_confidence": 0.30,
+                    },
+                    "collection_metadata": {"research_items_by_source": {"news": 4}},
+                }
+                manager.record_cycle(summary, timestamp=ts)
+
+            journal_path = Path(config.decision_journal_path)
+            with journal_path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    '{"event":"decision_call_resolved","timestamp":"2026-02-15T18:00:00+00:00","outcome":"good_call"}\n'
+                )
+                handle.write(
+                    '{"event":"decision_call_resolved","timestamp":"2026-02-16T18:00:00+00:00","outcome":"bad_call","why_bad":["ai_thesis_miss"]}\n'
+                )
+
+            # Friday Feb 20, 2026 18:05 ET.
+            manager.maybe_send_scheduled_reports(now=datetime(2026, 2, 20, 23, 5, tzinfo=timezone.utc))
+
+            rows = [
+                json.loads(line)
+                for line in Path(config.layer_reevaluation_log_path).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            event = next(row for row in rows if row.get("event") == "layer_reevaluation_report")
+            self.assertIn("Layer Reevaluation Report", str(event.get("subject") or ""))
+            self.assertIsInstance(event.get("metrics"), dict)
+            self.assertIsInstance(event.get("comparison"), dict)
+            recommendations = event.get("recommendations")
+            self.assertIsInstance(recommendations, list)
+            if isinstance(recommendations, list):
+                self.assertTrue(any(isinstance(item, dict) and item.get("layer") == "L1" for item in recommendations))
 
 
 if __name__ == "__main__":

@@ -132,6 +132,9 @@ DEFAULT_QUANTUM = ["IONQ", "RGTI", "QBTS"]
 class BotConfig:
     starting_capital: float = 1000.0
     live_trading: bool = False
+    live_trading_requested: bool = False
+    live_trading_greenlight: bool = False
+    enable_research_soak_mode: bool = False
     rebalance_interval_seconds: int = 300
     enable_market_hours_guard: bool = True
     runtime_timezone: str = "America/New_York"
@@ -264,6 +267,8 @@ class BotConfig:
     enable_bootstrap_optimization_reports: bool = True
     bootstrap_optimization_hour_local: int = 18
     bootstrap_optimization_log_path: str = "bootstrap_optimization_report.jsonl"
+    enable_layer_reevaluation_reports: bool = True
+    layer_reevaluation_log_path: str = "layer_reevaluation_report.jsonl"
     report_state_path: str = "report_state.json"
     daily_report_log_path: str = "daily_report.jsonl"
     weekly_report_log_path: str = "weekly_report.jsonl"
@@ -323,9 +328,15 @@ class BotConfig:
                 if symbol not in universe:
                     universe.append(symbol)
 
-        live_trading = _env_bool("LIVE_TRADING", False)
+        live_trading_requested = _env_bool("LIVE_TRADING", False)
         if force_live is not None:
-            live_trading = force_live
+            live_trading_requested = force_live
+        live_trading_greenlight = _env_bool("LIVE_TRADING_GREENLIGHT", False)
+        live_trading = bool(live_trading_requested and live_trading_greenlight)
+        enable_research_soak_mode = _env_bool("ENABLE_RESEARCH_SOAK_MODE", False)
+        if enable_research_soak_mode:
+            # Research-soak mode always disables real order submission.
+            live_trading = False
 
         interval = _env_int("REBALANCE_INTERVAL_SECONDS", 300)
         if interval_override is not None:
@@ -334,6 +345,9 @@ class BotConfig:
         return cls(
             starting_capital=_env_float("STARTING_CAPITAL", 1000.0),
             live_trading=live_trading,
+            live_trading_requested=live_trading_requested,
+            live_trading_greenlight=live_trading_greenlight,
+            enable_research_soak_mode=enable_research_soak_mode,
             rebalance_interval_seconds=max(interval, 60),
             enable_market_hours_guard=_env_bool("ENABLE_MARKET_HOURS_GUARD", True),
             runtime_timezone=os.getenv("RUNTIME_TIMEZONE", "America/New_York").strip() or "America/New_York",
@@ -524,6 +538,12 @@ class BotConfig:
                 "bootstrap_optimization_report.jsonl",
             ).strip()
             or "bootstrap_optimization_report.jsonl",
+            enable_layer_reevaluation_reports=_env_bool("ENABLE_LAYER_REEVALUATION_REPORTS", True),
+            layer_reevaluation_log_path=os.getenv(
+                "LAYER_REEVALUATION_LOG_PATH",
+                "layer_reevaluation_report.jsonl",
+            ).strip()
+            or "layer_reevaluation_report.jsonl",
             report_state_path=os.getenv("REPORT_STATE_PATH", "report_state.json").strip()
             or "report_state.json",
             daily_report_log_path=os.getenv("DAILY_REPORT_LOG_PATH", "daily_report.jsonl").strip()

@@ -1,75 +1,219 @@
 {
-  "title": "AI Trader Future Implementation Backlog",
+  "title": "AI Trader LLM Guardrail + Implementation Backlog",
   "updated_at": "2026-02-15",
+  "estimate_owner": "codex",
+  "estimate_basis": "single engineer, focused implementation + tests in current codebase",
+  "p0_guardrail_total_estimate": "5-9 days",
   "items": [
     {
-      "id": "profit-split-rule",
-      "title": "Profit Split Rule for Realized Option Gains",
+      "id": "llm-go-live-safety-gate",
+      "title": "LLM Go-Live Safety Gate",
       "priority": "P0",
       "status": "planned",
-      "category": "Capital Allocation",
-      "target_window": "Next strategy sprint",
-      "summary": "When options close in profit, split gains into configurable buckets so profits are intentionally recycled instead of treated as undifferentiated cash.",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Define and enforce a single hard gate that must pass before live trading can be enabled.",
       "details": [
-        "Add config controls for split percentages (example: 60% option reserve, 40% equity deployment).",
-        "Apply split only to realized option PnL events.",
-        "Log each split decision and resulting allocations in metadata/reporting."
+        "Require completion of all P0 guardrail tasks before changing live flags.",
+        "Require multi-day dry-run validation and explicit operator sign-off.",
+        "Keep live mode blocked until checklist passes and greenlight is granted."
       ]
     },
     {
       "id": "option-take-profit-stop-loss",
-      "title": "Option Take-Profit and Stop-Loss Rules",
+      "title": "Option Take-Profit, Stop-Loss, and Time-Exit Rules",
       "priority": "P0",
       "status": "planned",
-      "category": "Risk Management",
-      "target_window": "Next strategy sprint",
-      "summary": "Add explicit options exit logic beyond underlying signal weakness.",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "1-2 days",
+      "summary": "Add explicit option exits so LLM entries cannot drift unbounded on loss or theta decay.",
       "details": [
-        "Support configurable profit target and loss cutoff by contract.",
-        "Include time-based decay exit (close near expiry if thesis not materializing).",
-        "Track rule-triggered exits separately in reports."
-      ]
-    },
-    {
-      "id": "mark-to-market-option-equity",
-      "title": "Mark-to-Market Option Valuation in Account Equity",
-      "priority": "P1",
-      "status": "planned",
-      "category": "Portfolio Accounting",
-      "target_window": "Q2 2026",
-      "summary": "Include open option market value in account equity to improve sizing and risk controls.",
-      "details": [
-        "Fetch mid/mark prices for open contracts each cycle.",
-        "Include option market value in equity budgeting and drawdown checks.",
-        "Fallback safely if quote data is unavailable."
+        "Support configurable profit target and hard loss cutoff per contract.",
+        "Include time-decay exits near expiry when thesis has not played out.",
+        "Track guardrail-triggered exits separately in reports and metadata."
       ]
     },
     {
       "id": "daily-loss-kill-switch",
-      "title": "Daily Loss and Drawdown Kill Switches",
-      "priority": "P1",
+      "title": "Daily and Weekly Drawdown Kill Switches",
+      "priority": "P0",
       "status": "planned",
-      "category": "Risk Management",
-      "target_window": "Q2 2026",
-      "summary": "Pause new entries when intraday or rolling drawdown thresholds are breached.",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Pause new entries when account drawdown thresholds are breached.",
       "details": [
-        "Add max daily loss percentage and max weekly drawdown controls.",
-        "Allow existing positions to de-risk while blocking fresh opens.",
-        "Expose kill-switch status prominently on dashboard."
+        "Add max daily loss and rolling weekly drawdown controls.",
+        "Allow reduce-only behavior while kill switch is active.",
+        "Expose kill-switch status and trigger reason on dashboard."
       ]
     },
     {
       "id": "execution-quality-guards",
       "title": "Execution Quality and Slippage Guards",
+      "priority": "P0",
+      "status": "planned",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Block low-quality fills so LLM suggestions cannot execute in poor liquidity conditions.",
+      "details": [
+        "Add minimum option open interest and volume filters.",
+        "Add max bid/ask spread and optional max slippage thresholds.",
+        "Record skipped trades with structured guardrail reasons."
+      ]
+    },
+    {
+      "id": "mark-to-market-option-equity",
+      "title": "Mark-to-Market Option Valuation in Account Equity",
+      "priority": "P0",
+      "status": "planned",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Use open option market value in equity and risk calculations before allowing entries.",
+      "details": [
+        "Fetch mark or midpoint prices for open option positions each cycle.",
+        "Include option value in account equity, drawdown, and sizing logic.",
+        "Fallback safely when option quote data is unavailable."
+      ]
+    },
+    {
+      "id": "llm-plan-schema-validation",
+      "title": "Strict LLM Plan Schema + Action Validation",
+      "priority": "P0",
+      "status": "planned",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Reject malformed or unsafe LLM plans before they reach order builders.",
+      "details": [
+        "Enforce strict schema for plan keys, value types, and limits.",
+        "Reject unknown symbols and invalid action combinations.",
+        "Persist normalized reject reasons in metadata for diagnostics."
+      ]
+    },
+    {
+      "id": "llm-fallback-circuit-breaker",
+      "title": "LLM Failure Circuit Breaker + Deterministic Fallback Hardening",
+      "priority": "P0",
+      "status": "planned",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Escalate from per-cycle fallback to temporary LLM disablement after repeated failures.",
+      "details": [
+        "Track consecutive LLM timeouts, invalid plans, and low-confidence responses.",
+        "Auto-enter cooldown window using deterministic decision flow only.",
+        "Expose breaker state in dashboard and daily reports."
+      ]
+    },
+    {
+      "id": "llm-order-risk-caps",
+      "title": "Per-Cycle and Per-Symbol LLM Risk Caps",
+      "priority": "P0",
+      "status": "planned",
+      "category": "LLM Guardrails",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Limit how much fresh exposure a single LLM plan can add in one cycle.",
+      "details": [
+        "Add max new notional risk per cycle and per symbol controls.",
+        "Add max options premium addition per cycle beyond current budget logic.",
+        "Auto-truncate plans that breach caps and log truncation reasons."
+      ]
+    },
+    {
+      "id": "research-soak-to-live-handoff",
+      "title": "Research Soak to Live Handoff Checklist",
+      "priority": "P0",
+      "status": "planned",
+      "category": "Operations",
+      "target_window": "Current guardrail sprint",
+      "estimate_codex": "0.25-0.5 day",
+      "summary": "Create a formal mode-switch procedure from 24/7 research soak to scheduled live trading.",
+      "details": [
+        "Require `ENABLE_RESEARCH_SOAK_MODE=false` before any live enable.",
+        "Require market-hours guard and runtime schedule checks before live.",
+        "Record sign-off timestamp and operator identity in control/result logs."
+      ]
+    },
+    {
+      "id": "backtest-framework",
+      "title": "Historical Backtesting Framework",
       "priority": "P1",
       "status": "planned",
-      "category": "Execution",
-      "target_window": "Q2 2026",
-      "summary": "Reject low-liquidity trades and enforce spread/slippage limits before order submission.",
+      "category": "Validation",
+      "target_window": "Post-guardrail sprint",
+      "estimate_codex": "3-7 days",
+      "summary": "Reproduce strategy logic across historical windows before parameter or model changes.",
       "details": [
-        "Add minimum option open interest/volume filters.",
-        "Add maximum bid/ask spread threshold for options.",
-        "Record skipped orders with structured reasons."
+        "Use point-in-time data assumptions where feasible.",
+        "Generate metrics for CAGR, drawdown, hit-rate, and turnover.",
+        "Use results as a required input for future guardrail/model changes."
+      ]
+    },
+    {
+      "id": "advisor-auto-sim",
+      "title": "Advisor Auto-Simulation for Proposed Setting Changes",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Advisor",
+      "target_window": "Post-guardrail sprint",
+      "estimate_codex": "2-4 days",
+      "summary": "Run what-if simulations for proposed weight and threshold changes.",
+      "details": [
+        "Compare baseline and candidate parameter sets.",
+        "Rank suggestions by expected risk-adjusted improvement.",
+        "Attach results to quarterly advisor reports."
+      ]
+    },
+    {
+      "id": "post-trade-attribution",
+      "title": "Post-Trade Attribution Dashboard",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Analytics",
+      "target_window": "Post-guardrail sprint",
+      "estimate_codex": "1-3 days",
+      "summary": "Break down PnL contribution by momentum, news, AI, macro, and source types.",
+      "details": [
+        "Add daily and weekly attribution tables.",
+        "Link attribution to decision journal outcomes.",
+        "Surface recurring failure patterns in advisor reports."
+      ]
+    },
+    {
+      "id": "cloud-deployment-remote-runtime",
+      "title": "Cloud Deployment + Remote Runtime Execution",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Infrastructure",
+      "target_window": "Immediate infrastructure sprint",
+      "estimate_codex": "1-3 days",
+      "summary": "Deploy bot/dashboard to cloud and run all ongoing operations from cloud server instead of local laptop.",
+      "details": [
+        "Provision cloud host with persistent volumes and systemd-managed bot service.",
+        "Configure secure dashboard access (domain, TLS, firewall, auth) and rotate secrets.",
+        "Set deploy/restart hooks (`CONTROL_REDEPLOY_COMMAND`) so dashboard actions redeploy on server.",
+        "Validate 24/7 research-soak runtime on cloud with local laptop fully disconnected."
+      ]
+    },
+    {
+      "id": "profit-split-rule",
+      "title": "Profit Split Rule for Realized Option Gains",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Capital Allocation",
+      "target_window": "After guardrail stabilization",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Split realized option gains into configurable capital buckets.",
+      "details": [
+        "Add config controls for split percentages (example: 60% option reserve, 40% equity deployment).",
+        "Apply split only to realized option PnL events.",
+        "Log each split decision and resulting allocations in metadata/reporting."
       ]
     },
     {
@@ -78,26 +222,13 @@
       "priority": "P2",
       "status": "planned",
       "category": "Strategy",
-      "target_window": "Q3 2026",
+      "target_window": "After guardrail stabilization",
+      "estimate_codex": "2-4 days",
       "summary": "Dynamically adjust equity/options allocation based on volatility and macro regime.",
       "details": [
-        "Classify risk-on/risk-off regimes from market and macro indicators.",
-        "Map regimes to conservative/neutral/aggressive risk presets.",
+        "Classify risk-on, risk-off, and high-vol regimes from market and macro indicators.",
+        "Map regimes to conservative, neutral, and aggressive risk presets.",
         "Backtest regime transitions before production rollout."
-      ]
-    },
-    {
-      "id": "post-trade-attribution",
-      "title": "Post-Trade Attribution Dashboard",
-      "priority": "P2",
-      "status": "planned",
-      "category": "Analytics",
-      "target_window": "Q3 2026",
-      "summary": "Break down PnL contribution by momentum, news, AI signals, macro model, and source types.",
-      "details": [
-        "Add daily and weekly attribution tables.",
-        "Link attribution to decision journal outcomes.",
-        "Surface recurring failure patterns in advisor reports."
       ]
     },
     {
@@ -107,39 +238,12 @@
       "status": "planned",
       "category": "Infrastructure",
       "target_window": "Q3 2026",
-      "summary": "Write portfolio, activity, metadata, and control logs directly to PostgreSQL while retaining JSONL fallback.",
+      "estimate_codex": "3-6 days",
+      "summary": "Write portfolio, activity, metadata, and control logs to PostgreSQL with JSONL fallback.",
       "details": [
         "Introduce schema migrations and retention policy.",
         "Keep file fallback for outage resilience.",
         "Enable SQL-based dashboard queries for historical analytics."
-      ]
-    },
-    {
-      "id": "backtest-framework",
-      "title": "Historical Backtesting Framework",
-      "priority": "P2",
-      "status": "planned",
-      "category": "Validation",
-      "target_window": "Q3 2026",
-      "summary": "Reproduce strategy logic across historical windows before deploying parameter changes.",
-      "details": [
-        "Use point-in-time data assumptions where feasible.",
-        "Generate metrics for CAGR, drawdown, hit-rate, and turnover.",
-        "Integrate with quarterly advisor recommendations."
-      ]
-    },
-    {
-      "id": "advisor-auto-sim",
-      "title": "Advisor Auto-Simulation for Proposed Setting Changes",
-      "priority": "P2",
-      "status": "planned",
-      "category": "Advisor",
-      "target_window": "Q3 2026",
-      "summary": "Before each quarter, run what-if simulations for suggested weight/threshold changes.",
-      "details": [
-        "Compare baseline and candidate parameter sets.",
-        "Rank suggestions by expected risk-adjusted improvement.",
-        "Attach results to quarterly advisor reports."
       ]
     },
     {
@@ -149,6 +253,7 @@
       "status": "planned",
       "category": "Security",
       "target_window": "Q4 2026",
+      "estimate_codex": "2-5 days",
       "summary": "Move credentials to managed secret storage and enforce least privilege on dashboard access.",
       "details": [
         "Integrate cloud secret manager for API keys.",
@@ -159,10 +264,11 @@
     {
       "id": "sre-observability",
       "title": "Observability and Alerting Expansion",
-      "priority": "P3",
+      "priority": "P2",
       "status": "planned",
       "category": "Operations",
       "target_window": "Q4 2026",
+      "estimate_codex": "1-3 days",
       "summary": "Ship metrics and logs to centralized monitoring with actionable alerts.",
       "details": [
         "Expose key health metrics (cycle duration, signal count, trade count, API errors).",

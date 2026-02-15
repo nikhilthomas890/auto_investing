@@ -38,6 +38,8 @@ class ConfigTests(unittest.TestCase):
                 "LLM_FIRST_MIN_CONFIDENCE": "0.55",
                 "LLM_FIRST_REQUIRE_SIGNALS_FOR_ENTRIES": "false",
                 "LLM_SUPPORT_MIN_SIGNAL_SCORE": "-0.01",
+                "ENABLE_LAYER_REEVALUATION_REPORTS": "true",
+                "LAYER_REEVALUATION_LOG_PATH": "layer_reevaluation_report.jsonl",
             },
             clear=False,
         ):
@@ -72,6 +74,55 @@ class ConfigTests(unittest.TestCase):
         self.assertAlmostEqual(config.llm_first_min_confidence, 0.55, places=6)
         self.assertFalse(config.llm_first_require_signals_for_entries)
         self.assertAlmostEqual(config.llm_support_min_signal_score, -0.01, places=6)
+        self.assertTrue(config.enable_layer_reevaluation_reports)
+        self.assertEqual(config.layer_reevaluation_log_path, "layer_reevaluation_report.jsonl")
+
+    def test_live_trading_remains_disabled_without_greenlight(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "LIVE_TRADING": "true",
+                "LIVE_TRADING_GREENLIGHT": "false",
+            },
+            clear=False,
+        ):
+            config = BotConfig.from_env(force_live=True)
+
+        self.assertTrue(config.live_trading_requested)
+        self.assertFalse(config.live_trading_greenlight)
+        self.assertFalse(config.live_trading)
+
+    def test_live_trading_enables_only_with_greenlight(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "LIVE_TRADING": "true",
+                "LIVE_TRADING_GREENLIGHT": "true",
+            },
+            clear=False,
+        ):
+            config = BotConfig.from_env()
+
+        self.assertTrue(config.live_trading_requested)
+        self.assertTrue(config.live_trading_greenlight)
+        self.assertTrue(config.live_trading)
+
+    def test_research_soak_mode_forces_non_live_execution(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "LIVE_TRADING": "true",
+                "LIVE_TRADING_GREENLIGHT": "true",
+                "ENABLE_RESEARCH_SOAK_MODE": "true",
+            },
+            clear=False,
+        ):
+            config = BotConfig.from_env(force_live=True)
+
+        self.assertTrue(config.live_trading_requested)
+        self.assertTrue(config.live_trading_greenlight)
+        self.assertTrue(config.enable_research_soak_mode)
+        self.assertFalse(config.live_trading)
 
 
 if __name__ == "__main__":

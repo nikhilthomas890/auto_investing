@@ -12,6 +12,9 @@ from typing import Any
 from ..core.config import BotConfig
 
 _BLOCKED_KEYS = {
+    "live_trading",
+    "live_trading_requested",
+    "live_trading_greenlight",
     "restrict_fund_transfers",
     "ai_api_key",
     "fmp_api_key",

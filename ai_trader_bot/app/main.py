@@ -250,6 +250,29 @@ def run() -> None:
     args = parse_args()
     config = BotConfig.from_env(force_live=args.live, interval_override=args.interval_seconds)
     configure_logging(args.log_level, config.system_log_path)
+    soak_bootstrap_context = {
+        "enabled": bool(config.enable_first_run_bootstrap),
+        "active": False,
+        "bypassed_by_research_soak_mode": bool(config.enable_research_soak_mode),
+        "start_date_local": "",
+        "trade_enable_date_local": "",
+        "complete_date_local": "",
+        "lookback_hours_override": None,
+    }
+    if config.enable_research_soak_mode:
+        logging.warning(
+            "Research soak mode enabled: running 24/7 research/learning cycles with order execution disabled."
+        )
+        if config.live_trading_requested:
+            logging.warning(
+                "Live trading request is ignored while ENABLE_RESEARCH_SOAK_MODE=true."
+            )
+    if config.live_trading_requested and not config.live_trading:
+        logging.warning(
+            "Live trading request was blocked. Set LIVE_TRADING_GREENLIGHT=true to allow real order placement."
+        )
+    elif config.live_trading:
+        logging.warning("Live trading is enabled and greenlit. Real orders may be submitted.")
     control_center = DecisionControlCenter(config) if config.enable_dashboard_control else None
 
     if config.enable_dashboard:
@@ -293,6 +316,17 @@ def run() -> None:
             if bool(control_status.get("restart_requested", False)) and config.control_auto_restart_on_request:
                 logging.warning("Control restart requested. Exiting process for supervisor-managed restart.")
                 return
+        if config.enable_research_soak_mode:
+            now_utc = datetime.now(timezone.utc)
+            summary = trader.run_cycle(
+                execute_orders=False,
+                lookback_hours_override=None,
+            )
+            summary["bootstrap"] = soak_bootstrap_context
+            reporter.record_cycle(summary, timestamp=now_utc)
+            reporter.maybe_send_scheduled_reports(now=now_utc)
+            print(json.dumps(summary, indent=2, default=str))
+            return
         now_utc = datetime.now(timezone.utc)
         now_local = now_utc.astimezone(runtime_tz)
         local_day = now_local.date()
@@ -345,6 +379,20 @@ def run() -> None:
                 if bool(control_status.get("restart_requested", False)) and config.control_auto_restart_on_request:
                     logging.warning("Control restart requested. Exiting process for supervisor-managed restart.")
                     return
+
+            if config.enable_research_soak_mode:
+                _run_and_record_cycle(
+                    trader,
+                    reporter,
+                    runtime_state,
+                    execute_orders=False,
+                    lookback_override=None,
+                    now_utc=now_utc,
+                    bootstrap_context=soak_bootstrap_context,
+                )
+                sleep_for = max(1, config.rebalance_interval_seconds - int(time.time() - loop_start))
+                time.sleep(sleep_for)
+                continue
 
             if bootstrap_active:
                 # During first-run bootstrap, run 24/7 research-only cycles regardless of market hours.

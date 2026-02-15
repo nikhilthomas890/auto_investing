@@ -60,6 +60,27 @@ class ControlCenterTests(unittest.TestCase):
             keys = {row["key"] for row in center.list_configurable_keys()}
             self.assertNotIn("restrict_fund_transfers", keys)
 
+    def test_live_trading_keys_are_protected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base = Path(tmp_dir)
+            config = self._config(base)
+            center = DecisionControlCenter(config)
+
+            center.submit_action(
+                action_type="set_config",
+                payload={"key": "live_trading", "value": True},
+            )
+            outcome = center.process_pending_actions()
+            self.assertEqual(outcome["processed"], 1)
+            result = outcome["outcomes"][0]
+            self.assertEqual(result["status"], "rejected")
+            self.assertFalse(config.live_trading)
+
+            keys = {row["key"] for row in center.list_configurable_keys()}
+            self.assertNotIn("live_trading", keys)
+            self.assertNotIn("live_trading_requested", keys)
+            self.assertNotIn("live_trading_greenlight", keys)
+
     def test_new_model_request_is_logged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             base = Path(tmp_dir)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import re
 import threading
 from datetime import date, datetime, timezone
 from http import HTTPStatus
@@ -28,6 +29,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
         self.control_center = control_center
         self.static_dir = Path(__file__).with_name("static")
         self.todo_path = Path(__file__).with_name("todo_items.json")
+        self.todo_lock = threading.RLock()
         self.report_tz = _resolve_timezone(config.report_timezone)
 
 
@@ -151,6 +153,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if route == "/api/control/actions":
             self._post_control_action()
+            return
+
+        if route == "/api/todo/items":
+            self._post_todo_item()
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
@@ -283,6 +289,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             "quarterly": Path(config.quarterly_model_advisor_log_path),
             "roadmap": Path(config.model_roadmap_log_path),
             "bootstrap": Path(config.bootstrap_optimization_log_path),
+            "layers": Path(config.layer_reevaluation_log_path),
         }
 
         def rows_for(path: Path) -> list[dict[str, Any]]:
@@ -321,12 +328,93 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         }
 
     def _todo_payload(self) -> dict[str, Any]:
+        with self.server.todo_lock:
+            payload = self._read_todo_document()
+        items = payload.get("items")
+        item_rows = items if isinstance(items, list) else []
+        response = dict(payload)
+        response["count"] = len(item_rows)
+        response["items"] = [row for row in item_rows if isinstance(row, dict)]
+        return response
+
+    @staticmethod
+    def _sanitize_todo_text(value: Any, *, max_chars: int = 400) -> str:
+        text = str(value or "").strip()
+        if max_chars <= 0:
+            return text
+        return text[:max_chars]
+
+    @staticmethod
+    def _sanitize_todo_details(value: Any) -> list[str]:
+        rows: list[str] = []
+        if isinstance(value, list):
+            for item in value:
+                text = str(item or "").strip()
+                if text:
+                    rows.append(text[:300])
+            return rows[:24]
+
+        if isinstance(value, str):
+            for line in value.splitlines():
+                text = line.strip()
+                if text:
+                    rows.append(text[:300])
+            return rows[:24]
+
+        return []
+
+    @staticmethod
+    def _normalize_priority(raw: Any) -> str:
+        value = str(raw or "P2").strip().upper()
+        if value not in {"P0", "P1", "P2", "P3"}:
+            return "P2"
+        return value
+
+    @staticmethod
+    def _normalize_status(raw: Any) -> str:
+        value = str(raw or "planned").strip().lower()
+        if value not in {"planned", "in_progress", "blocked", "completed", "deferred"}:
+            return "planned"
+        return value
+
+    @staticmethod
+    def _slugify_todo_id(raw: str) -> str:
+        token = re.sub(r"[^a-z0-9]+", "-", str(raw or "").strip().lower()).strip("-")
+        return token[:64] if token else ""
+
+    def _unique_todo_id(self, desired: str, used: set[str]) -> str:
+        base = self._slugify_todo_id(desired) or f"todo-{int(datetime.now(timezone.utc).timestamp())}"
+        candidate = base
+        suffix = 2
+        while candidate in used:
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        return candidate
+
+    def _normalize_todo_item(self, raw_item: dict[str, Any], *, require_title: bool) -> tuple[dict[str, Any], str]:
+        title = self._sanitize_todo_text(raw_item.get("title"), max_chars=160)
+        if require_title and not title:
+            return {}, "Missing item title."
+
+        item = {
+            "id": self._slugify_todo_id(str(raw_item.get("id") or "")),
+            "title": title,
+            "priority": self._normalize_priority(raw_item.get("priority")),
+            "status": self._normalize_status(raw_item.get("status")),
+            "category": self._sanitize_todo_text(raw_item.get("category"), max_chars=80) or "general",
+            "target_window": self._sanitize_todo_text(raw_item.get("target_window"), max_chars=80) or "backlog",
+            "estimate_codex": self._sanitize_todo_text(raw_item.get("estimate_codex"), max_chars=60),
+            "summary": self._sanitize_todo_text(raw_item.get("summary"), max_chars=500),
+            "details": self._sanitize_todo_details(raw_item.get("details")),
+        }
+        return item, ""
+
+    def _read_todo_document(self) -> dict[str, Any]:
         path = self.server.todo_path
         if not path.exists():
             return {
                 "title": "Implementation To-Do",
                 "updated_at": "",
-                "count": 0,
                 "items": [],
             }
 
@@ -336,28 +424,103 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return {
                 "title": "Implementation To-Do",
                 "updated_at": "",
-                "count": 0,
                 "items": [],
-                "error": "Failed to load to-do items.",
             }
 
         if not isinstance(payload, dict):
             return {
                 "title": "Implementation To-Do",
                 "updated_at": "",
-                "count": 0,
                 "items": [],
-                "error": "Invalid to-do payload format.",
             }
 
+        normalized = dict(payload)
+        normalized["title"] = str(payload.get("title") or "Implementation To-Do")
+        normalized["updated_at"] = str(payload.get("updated_at") or "")
         items_raw = payload.get("items")
-        items = [row for row in items_raw if isinstance(row, dict)] if isinstance(items_raw, list) else []
-        return {
-            "title": str(payload.get("title") or "Implementation To-Do"),
-            "updated_at": str(payload.get("updated_at") or ""),
-            "count": len(items),
-            "items": items,
-        }
+        normalized["items"] = [row for row in items_raw if isinstance(row, dict)] if isinstance(items_raw, list) else []
+        return normalized
+
+    def _write_todo_document(self, payload: dict[str, Any]) -> None:
+        path = self.server.todo_path
+        if path.parent != Path("."):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        payload["updated_at"] = datetime.now(timezone.utc).date().isoformat()
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    def _post_todo_item(self) -> None:
+        request = self._read_json_body(max_bytes=300_000)
+        if request is None:
+            self._json_error("Invalid JSON payload.")
+            return
+
+        action = str(request.get("action") or "create").strip().lower() or "create"
+        if action not in {"create", "update", "delete"}:
+            self._json_error("Unsupported todo action. Use create, update, or delete.")
+            return
+
+        try:
+            with self.server.todo_lock:
+                document = self._read_todo_document()
+                items = [row for row in document.get("items", []) if isinstance(row, dict)]
+                used_ids = {str(row.get("id") or "").strip() for row in items if str(row.get("id") or "").strip()}
+
+                if action == "create":
+                    raw_item = request.get("item")
+                    if not isinstance(raw_item, dict):
+                        self._json_error("Missing item object for create action.")
+                        return
+                    item, error = self._normalize_todo_item(raw_item, require_title=True)
+                    if error:
+                        self._json_error(error)
+                        return
+                    item["id"] = self._unique_todo_id(item.get("id") or item["title"], used_ids)
+                    items.append(item)
+                    document["items"] = items
+                    self._write_todo_document(document)
+                    self._json({"ok": True, "action": "create", "item": item, "count": len(items)}, status=201)
+                    return
+
+                item_id = self._slugify_todo_id(str(request.get("id") or request.get("item_id") or ""))
+                if not item_id:
+                    self._json_error("Missing to-do id.")
+                    return
+
+                item_index = -1
+                for idx, item in enumerate(items):
+                    if self._slugify_todo_id(str(item.get("id") or "")) == item_id:
+                        item_index = idx
+                        break
+                if item_index < 0:
+                    self._json_error("To-do item not found.", status=404)
+                    return
+
+                if action == "delete":
+                    removed = items.pop(item_index)
+                    document["items"] = items
+                    self._write_todo_document(document)
+                    self._json({"ok": True, "action": "delete", "item": removed, "count": len(items)})
+                    return
+
+                patch = request.get("item")
+                if not isinstance(patch, dict):
+                    self._json_error("Missing item object for update action.")
+                    return
+                merged = dict(items[item_index])
+                merged.update(patch)
+                normalized_item, error = self._normalize_todo_item(merged, require_title=True)
+                if error:
+                    self._json_error(error)
+                    return
+                normalized_item["id"] = items[item_index].get("id") or item_id
+                items[item_index] = normalized_item
+                document["items"] = items
+                self._write_todo_document(document)
+                self._json({"ok": True, "action": "update", "item": normalized_item, "count": len(items)})
+        except Exception as exc:
+            logging.exception("To-do update failed: %s", exc)
+            self._json_error("Failed to update to-do items.", status=500)
+            return
 
     def _control_actions_payload(self, params: dict[str, list[str]]) -> dict[str, Any]:
         config = self.server.config

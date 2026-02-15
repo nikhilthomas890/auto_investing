@@ -16,6 +16,7 @@ This repository contains an automated trading bot that:
 
 - This is not financial advice.
 - Start in simulation (`LIVE_TRADING=false`) and validate behavior for multiple days.
+- Live mode is hard-locked unless `LIVE_TRADING_GREENLIGHT=true`.
 - Options can lose 100% of premium.
 - You are responsible for account permissions, compliance, and risk.
 - Money-transfer endpoints are always blocked; startup fails if `RESTRICT_FUND_TRANSFERS` is not `true`.
@@ -127,6 +128,20 @@ Controls:
 - `FIRST_RUN_BOOTSTRAP_DAYS=5`
 - `FIRST_RUN_BOOTSTRAP_LOOKBACK_HOURS=4320` (about 6 months)
 
+### Continuous Research Soak Mode (24/7, No Orders)
+
+If you want nonstop research/learning until explicit go-live approval, enable:
+
+- `ENABLE_RESEARCH_SOAK_MODE=true`
+- `LIVE_TRADING=false`
+- `LIVE_TRADING_GREENLIGHT=false`
+
+When soak mode is enabled:
+
+- order execution is always disabled
+- runtime runs cycles 24/7 (market-hours guard is bypassed)
+- first-run bootstrap timing gates are bypassed
+
 ### LLM-First Decisioning + AI Interpreter
 
 The runtime is LLM-first by default:
@@ -143,6 +158,8 @@ LLM-first behavior:
 - hard risk controls still apply (position sizing, max orders, options budget, max contracts)
 - entry proposals can require supporting signal scores (`LLM_FIRST_REQUIRE_SIGNALS_FOR_ENTRIES`)
 - if no API key/provider mismatch/low confidence, bot automatically falls back to the deterministic rules/signal engine
+
+Layer model for governance and tuning is documented in `docs/LLM_LAYER_FRAMEWORK.md`.
 
 Optional AI article interpretation (separate from LLM decision planner):
 
@@ -268,7 +285,8 @@ Dashboard pages:
 - Portfolio: current holdings and open call positions
 - Research Feed: daily news/filings/transcripts/social/analyst items with summary, key points, and source link
 - Reports: tabbed daily/weekly/quarterly/roadmap/bootstrap reports
-- To-Do: implementation backlog and planned strategy/infrastructure improvements
+- Reports include weekly Layer Reevaluation guidance for L0-L4 learning layers
+- To-Do: create/manage implementation backlog items (add, complete, delete) directly from dashboard
 - System Logs: live runtime log view
 - Control Center: submit runtime decisions (value updates, model build requests, restart/redeploy requests) and view action results
 
@@ -288,6 +306,7 @@ Configure scheduling/report generation:
 - `MODEL_ROADMAP_HOUR_LOCAL=18`
 - `ENABLE_BOOTSTRAP_OPTIMIZATION_REPORTS=true`
 - `BOOTSTRAP_OPTIMIZATION_HOUR_LOCAL=18`
+- `ENABLE_LAYER_REEVALUATION_REPORTS=true`
 
 Configure dashboard:
 
@@ -314,6 +333,7 @@ Report/runtime data paths:
 - `QUARTERLY_MODEL_ADVISOR_LOG_PATH`
 - `MODEL_ROADMAP_LOG_PATH`
 - `BOOTSTRAP_OPTIMIZATION_LOG_PATH`
+- `LAYER_REEVALUATION_LOG_PATH`
 - `RESEARCH_LOG_PATH`
 - `ACTIVITY_LOG_PATH`
 - `PORTFOLIO_LOG_PATH`
@@ -347,10 +367,12 @@ Default dashboard URL: `http://127.0.0.1:8787`.
 Only after validation, enable live execution:
 
 ```bash
+export LIVE_TRADING=true
+export LIVE_TRADING_GREENLIGHT=true
 python -m ai_trader_bot --live --interval-seconds 300
 ```
 
-`--live` overrides `LIVE_TRADING=false` and allows real order submission.
+`--live` requests live mode, but real order placement remains disabled unless `LIVE_TRADING_GREENLIGHT=true`.
 
 ## Notes on Schwab auth
 

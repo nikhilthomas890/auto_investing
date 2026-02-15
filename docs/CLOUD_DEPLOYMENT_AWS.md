@@ -122,6 +122,8 @@ Edit `.env` and set at minimum:
   - `OPENAI_API_KEY` (required for the LLM-first planner; defaults keep LLM-first enabled)
 - Runtime mode:
   - `LIVE_TRADING=false` for initial validation
+  - `LIVE_TRADING_GREENLIGHT=false`
+  - `ENABLE_RESEARCH_SOAK_MODE=true` for 24/7 research/learning soak with no order execution
 - Dashboard:
   - `ENABLE_DASHBOARD=true`
   - `DASHBOARD_HOST=127.0.0.1`
@@ -229,7 +231,7 @@ Dashboard URL:
 
 After validation:
 
-1. Set `LIVE_TRADING=true` in `.env`
+1. Set `ENABLE_RESEARCH_SOAK_MODE=false`, `LIVE_TRADING=true`, and `LIVE_TRADING_GREENLIGHT=true` in `.env`
 2. Restart service:
 
 ```bash

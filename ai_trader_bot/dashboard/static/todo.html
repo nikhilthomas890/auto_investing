@@ -22,6 +22,37 @@
       <a href="/control">Control Center</a>
     </nav>
 
+    <section class="card" style="margin-bottom:16px;">
+      <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+        <h2 style="margin:0;">Create New To-Do</h2>
+        <span class="meta" id="todo-action-meta">Add tasks directly from dashboard.</span>
+      </div>
+      <div class="form-grid form-grid-3">
+        <label class="label" for="todo-title">Title</label>
+        <input class="input" id="todo-title" type="text" placeholder="Example: Add LLM circuit breaker" />
+        <label class="label" for="todo-priority">Priority</label>
+        <select class="input" id="todo-priority">
+          <option value="P0">P0</option>
+          <option value="P1">P1</option>
+          <option value="P2" selected>P2</option>
+          <option value="P3">P3</option>
+        </select>
+        <label class="label" for="todo-category">Category</label>
+        <input class="input" id="todo-category" type="text" placeholder="LLM Guardrails" />
+        <label class="label" for="todo-target-window">Target Window</label>
+        <input class="input" id="todo-target-window" type="text" placeholder="Current sprint" />
+        <label class="label" for="todo-estimate">Estimate</label>
+        <input class="input" id="todo-estimate" type="text" placeholder="0.5-1 day" />
+      </div>
+      <label class="label" for="todo-summary" style="margin-top:8px;">Summary</label>
+      <textarea class="input" id="todo-summary" rows="2" placeholder="Short objective..."></textarea>
+      <label class="label" for="todo-details" style="margin-top:8px;">Details (one per line)</label>
+      <textarea class="input" id="todo-details" rows="4" placeholder="First detail&#10;Second detail"></textarea>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn btn-primary" id="todo-create-btn" type="button">Add To-Do</button>
+      </div>
+    </section>
+
     <section class="card">
       <div class="row" style="justify-content:space-between; margin-bottom:10px;">
         <h2 style="margin:0;">Future Implementations and Improvements</h2>
