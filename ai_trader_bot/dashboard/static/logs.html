@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>System Logs</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">System Logs</div>
+      <div class="meta" id="log-meta">Loading…</div>
+    </header>
+
+    <nav class="nav">
+      <a href="/portfolio">Portfolio</a>
+      <a href="/research">Research Feed</a>
+      <a href="/reports">Reports</a>
+      <a href="/todo">To-Do</a>
+      <a class="active" href="/logs">System Logs</a>
+      <a href="/control">Control Center</a>
+    </nav>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+        <h2 style="margin:0;">Live Runtime Log Stream</h2>
+        <button class="btn" id="refresh-btn" type="button">Refresh</button>
+      </div>
+      <div class="log-pane" id="log-pane"></div>
+    </section>
+  </main>
+
+  <script src="/static/logs.js"></script>
+</body>
+</html>

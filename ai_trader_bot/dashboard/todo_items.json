@@ -1,0 +1,174 @@
+{
+  "title": "AI Trader Future Implementation Backlog",
+  "updated_at": "2026-02-15",
+  "items": [
+    {
+      "id": "profit-split-rule",
+      "title": "Profit Split Rule for Realized Option Gains",
+      "priority": "P0",
+      "status": "planned",
+      "category": "Capital Allocation",
+      "target_window": "Next strategy sprint",
+      "summary": "When options close in profit, split gains into configurable buckets so profits are intentionally recycled instead of treated as undifferentiated cash.",
+      "details": [
+        "Add config controls for split percentages (example: 60% option reserve, 40% equity deployment).",
+        "Apply split only to realized option PnL events.",
+        "Log each split decision and resulting allocations in metadata/reporting."
+      ]
+    },
+    {
+      "id": "option-take-profit-stop-loss",
+      "title": "Option Take-Profit and Stop-Loss Rules",
+      "priority": "P0",
+      "status": "planned",
+      "category": "Risk Management",
+      "target_window": "Next strategy sprint",
+      "summary": "Add explicit options exit logic beyond underlying signal weakness.",
+      "details": [
+        "Support configurable profit target and loss cutoff by contract.",
+        "Include time-based decay exit (close near expiry if thesis not materializing).",
+        "Track rule-triggered exits separately in reports."
+      ]
+    },
+    {
+      "id": "mark-to-market-option-equity",
+      "title": "Mark-to-Market Option Valuation in Account Equity",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Portfolio Accounting",
+      "target_window": "Q2 2026",
+      "summary": "Include open option market value in account equity to improve sizing and risk controls.",
+      "details": [
+        "Fetch mid/mark prices for open contracts each cycle.",
+        "Include option market value in equity budgeting and drawdown checks.",
+        "Fallback safely if quote data is unavailable."
+      ]
+    },
+    {
+      "id": "daily-loss-kill-switch",
+      "title": "Daily Loss and Drawdown Kill Switches",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Risk Management",
+      "target_window": "Q2 2026",
+      "summary": "Pause new entries when intraday or rolling drawdown thresholds are breached.",
+      "details": [
+        "Add max daily loss percentage and max weekly drawdown controls.",
+        "Allow existing positions to de-risk while blocking fresh opens.",
+        "Expose kill-switch status prominently on dashboard."
+      ]
+    },
+    {
+      "id": "execution-quality-guards",
+      "title": "Execution Quality and Slippage Guards",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Execution",
+      "target_window": "Q2 2026",
+      "summary": "Reject low-liquidity trades and enforce spread/slippage limits before order submission.",
+      "details": [
+        "Add minimum option open interest/volume filters.",
+        "Add maximum bid/ask spread threshold for options.",
+        "Record skipped orders with structured reasons."
+      ]
+    },
+    {
+      "id": "regime-aware-allocation",
+      "title": "Market Regime-Aware Allocation",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Strategy",
+      "target_window": "Q3 2026",
+      "summary": "Dynamically adjust equity/options allocation based on volatility and macro regime.",
+      "details": [
+        "Classify risk-on/risk-off regimes from market and macro indicators.",
+        "Map regimes to conservative/neutral/aggressive risk presets.",
+        "Backtest regime transitions before production rollout."
+      ]
+    },
+    {
+      "id": "post-trade-attribution",
+      "title": "Post-Trade Attribution Dashboard",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Analytics",
+      "target_window": "Q3 2026",
+      "summary": "Break down PnL contribution by momentum, news, AI signals, macro model, and source types.",
+      "details": [
+        "Add daily and weekly attribution tables.",
+        "Link attribution to decision journal outcomes.",
+        "Surface recurring failure patterns in advisor reports."
+      ]
+    },
+    {
+      "id": "direct-postgres-writer",
+      "title": "Direct PostgreSQL Persistence Layer",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Infrastructure",
+      "target_window": "Q3 2026",
+      "summary": "Write portfolio, activity, metadata, and control logs directly to PostgreSQL while retaining JSONL fallback.",
+      "details": [
+        "Introduce schema migrations and retention policy.",
+        "Keep file fallback for outage resilience.",
+        "Enable SQL-based dashboard queries for historical analytics."
+      ]
+    },
+    {
+      "id": "backtest-framework",
+      "title": "Historical Backtesting Framework",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Validation",
+      "target_window": "Q3 2026",
+      "summary": "Reproduce strategy logic across historical windows before deploying parameter changes.",
+      "details": [
+        "Use point-in-time data assumptions where feasible.",
+        "Generate metrics for CAGR, drawdown, hit-rate, and turnover.",
+        "Integrate with quarterly advisor recommendations."
+      ]
+    },
+    {
+      "id": "advisor-auto-sim",
+      "title": "Advisor Auto-Simulation for Proposed Setting Changes",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Advisor",
+      "target_window": "Q3 2026",
+      "summary": "Before each quarter, run what-if simulations for suggested weight/threshold changes.",
+      "details": [
+        "Compare baseline and candidate parameter sets.",
+        "Rank suggestions by expected risk-adjusted improvement.",
+        "Attach results to quarterly advisor reports."
+      ]
+    },
+    {
+      "id": "security-hardening",
+      "title": "Security Hardening for Secrets and Access",
+      "priority": "P2",
+      "status": "planned",
+      "category": "Security",
+      "target_window": "Q4 2026",
+      "summary": "Move credentials to managed secret storage and enforce least privilege on dashboard access.",
+      "details": [
+        "Integrate cloud secret manager for API keys.",
+        "Add dashboard authentication and role-based permissions.",
+        "Audit and rotate credential usage regularly."
+      ]
+    },
+    {
+      "id": "sre-observability",
+      "title": "Observability and Alerting Expansion",
+      "priority": "P3",
+      "status": "planned",
+      "category": "Operations",
+      "target_window": "Q4 2026",
+      "summary": "Ship metrics and logs to centralized monitoring with actionable alerts.",
+      "details": [
+        "Expose key health metrics (cycle duration, signal count, trade count, API errors).",
+        "Alert on stale cycles, repeated order failures, and data ingestion failures.",
+        "Add uptime and backup verification dashboards."
+      ]
+    }
+  ]
+}

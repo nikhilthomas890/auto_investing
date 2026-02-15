@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Research Feed</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">Daily Research Feed</div>
+      <div class="row">
+        <label class="meta" for="date-picker">Date</label>
+        <input id="date-picker" type="date" />
+      </div>
+    </header>
+
+    <nav class="nav">
+      <a href="/portfolio">Portfolio</a>
+      <a class="active" href="/research">Research Feed</a>
+      <a href="/reports">Reports</a>
+      <a href="/todo">To-Do</a>
+      <a href="/logs">System Logs</a>
+      <a href="/control">Control Center</a>
+    </nav>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+        <h2 style="margin:0;">News, SEC Filings, Transcripts, Social, Analyst Posts</h2>
+        <span class="badge" id="count-pill">0 items</span>
+      </div>
+      <div class="items" id="items"></div>
+    </section>
+  </main>
+
+  <dialog id="detail-modal">
+    <div class="dialog-body">
+      <h2 id="modal-title"></h2>
+      <p id="modal-summary"></p>
+      <h3 style="font-size:0.95rem; margin:12px 0 6px;">Key Points</h3>
+      <ul id="modal-points"></ul>
+      <div class="dialog-footer">
+        <a class="btn" id="modal-link" target="_blank" rel="noopener noreferrer">Open Source Article</a>
+        <button class="btn" id="modal-close" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/static/research.js"></script>
+</body>
+</html>

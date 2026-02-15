@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Portfolio Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">AI Trader Dashboard</div>
+      <div class="meta" id="last-updated">Updating…</div>
+    </header>
+
+    <nav class="nav">
+      <a class="active" href="/portfolio">Portfolio</a>
+      <a href="/research">Research Feed</a>
+      <a href="/reports">Reports</a>
+      <a href="/todo">To-Do</a>
+      <a href="/logs">System Logs</a>
+      <a href="/control">Control Center</a>
+    </nav>
+
+    <section class="grid-2">
+      <article class="card">
+        <h2>Account Snapshot</h2>
+        <div class="kpis">
+          <div class="kpi"><div class="label">Account Equity</div><div class="value" id="equity">-</div></div>
+          <div class="kpi"><div class="label">Cash</div><div class="value" id="cash">-</div></div>
+          <div class="kpi"><div class="label">Open Calls</div><div class="value" id="calls-count">-</div></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Open Call Positions</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Contract</th><th>Quantity</th></tr></thead>
+            <tbody id="calls-body"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2>Equity Holdings</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Symbol</th><th>Quantity</th></tr></thead>
+          <tbody id="equity-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2>Recent Trade Decisions</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Timestamp</th><th>Symbol</th><th>Instruction</th><th>Qty</th><th>Reason</th></tr></thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/portfolio.js"></script>
+</body>
+</html>
