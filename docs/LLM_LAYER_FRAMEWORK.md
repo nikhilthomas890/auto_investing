@@ -77,7 +77,7 @@ Adjustment policy:
 ## Reevaluation Workflow
 
 Cadence:
-- weekly (aligned with weekly report schedule)
+- quarterly (aligned with quarterly advisor reminder window)
 - report stored in `LAYER_REEVALUATION_LOG_PATH`
 
 Inputs:
@@ -86,7 +86,7 @@ Inputs:
 - decision outcomes (`DECISION_JOURNAL_PATH`)
 
 Core metrics:
-- weekly return and max drawdown
+- quarter-window return and max drawdown
 - resolved good/bad call rate
 - LLM plan generation/use/fallback rates
 - no-trade ratio in trade-capable cycles

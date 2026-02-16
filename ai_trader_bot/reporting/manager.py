@@ -29,7 +29,7 @@ WEEKDAY_INDEX = {
 class ReportState:
     last_daily_report_date: str = ""
     last_weekly_report_key: str = ""
-    last_layer_reevaluation_week_key: str = ""
+    last_layer_reevaluation_target: str = ""
     last_quarterly_advisor_target: str = ""
     last_model_roadmap_target: str = ""
     last_bootstrap_optimization_date: str = ""
@@ -78,7 +78,11 @@ class ReportManager:
         return ReportState(
             last_daily_report_date=str(payload.get("last_daily_report_date") or ""),
             last_weekly_report_key=str(payload.get("last_weekly_report_key") or ""),
-            last_layer_reevaluation_week_key=str(payload.get("last_layer_reevaluation_week_key") or ""),
+            last_layer_reevaluation_target=str(
+                payload.get("last_layer_reevaluation_target")
+                or payload.get("last_layer_reevaluation_week_key")
+                or ""
+            ),
             last_quarterly_advisor_target=str(payload.get("last_quarterly_advisor_target") or ""),
             last_model_roadmap_target=str(payload.get("last_model_roadmap_target") or ""),
             last_bootstrap_optimization_date=str(payload.get("last_bootstrap_optimization_date") or ""),
@@ -88,7 +92,7 @@ class ReportManager:
         payload = {
             "last_daily_report_date": self.state.last_daily_report_date,
             "last_weekly_report_key": self.state.last_weekly_report_key,
-            "last_layer_reevaluation_week_key": self.state.last_layer_reevaluation_week_key,
+            "last_layer_reevaluation_target": self.state.last_layer_reevaluation_target,
             "last_quarterly_advisor_target": self.state.last_quarterly_advisor_target,
             "last_model_roadmap_target": self.state.last_model_roadmap_target,
             "last_bootstrap_optimization_date": self.state.last_bootstrap_optimization_date,
@@ -672,47 +676,45 @@ class ReportManager:
             return
 
         now_local = now.astimezone(self.report_tz)
-        if now_local.hour < self.config.weekly_report_hour_local:
+        if now_local.hour < self.config.quarterly_model_advisor_hour_local:
             return
 
-        target_day = WEEKDAY_INDEX.get(self.config.weekly_report_day_local.upper(), 4)
-        report_date = now_local.date()
-        if self.config.send_reports_market_days_only and not is_us_equity_market_day(report_date):
+        today = now_local.date()
+        target_start = self._next_quarter_start(today)
+        days_until = (target_start - today).days
+        if days_until < 0 or days_until > self.config.quarterly_model_advisor_reminder_days:
             return
 
-        send_day = self._weekly_send_day_for_week(report_date, target_day)
-        if send_day is None or report_date != send_day:
+        target_key = target_start.isoformat()
+        if self.state.last_layer_reevaluation_target == target_key:
             return
 
-        iso = report_date.isocalendar()
-        week_key = f"{iso.year}-W{iso.week:02d}"
-        if self.state.last_layer_reevaluation_week_key == week_key:
-            return
-
-        payload = self.build_layer_reevaluation_payload(report_date)
+        payload = self.build_layer_reevaluation_payload(target_start)
         if payload is None:
             return
 
+        metrics = payload["metrics"] if isinstance(payload.get("metrics"), dict) else {}
         self._append_jsonl(
             self.layer_reevaluation_path,
             {
                 "event": "layer_reevaluation_report",
                 "timestamp": now.isoformat(),
-                "week_key": week_key,
-                "range_end": report_date.isoformat(),
+                "target_quarter_start": target_key,
+                "range_start": str(metrics.get("evaluation_start") or ""),
+                "range_end": str(metrics.get("evaluation_end") or ""),
                 "subject": payload["subject"],
                 "body": payload["body"],
-                "metrics": payload["metrics"],
+                "metrics": metrics,
                 "comparison": payload["comparison"],
                 "recommendations": payload["recommendations"],
             },
         )
         logging.info(
             "Layer reevaluation report generated for %s; stored at %s",
-            week_key,
+            target_key,
             self.layer_reevaluation_path,
         )
-        self.state.last_layer_reevaluation_week_key = week_key
+        self.state.last_layer_reevaluation_target = target_key
         self._save_state()
 
     def _weekly_send_day_for_week(self, current_day: date, target_day_idx: int) -> date | None:
@@ -1016,7 +1018,7 @@ class ReportManager:
             start_equity = float(self.config.starting_capital)
             end_equity = start_equity
             max_drawdown = 0.0
-        week_return_pct = ((end_equity / start_equity) - 1.0) if start_equity > 0 else 0.0
+        window_return_pct = ((end_equity / start_equity) - 1.0) if start_equity > 0 else 0.0
 
         trade_cycles = [event for event in metadata_events if bool(event.get("execute_orders", False))]
         no_trade_cycles = sum(1 for event in trade_cycles if int(event.get("orders_proposed", 0) or 0) == 0)
@@ -1089,7 +1091,7 @@ class ReportManager:
             "evaluation_end": end_date.isoformat(),
             "start_equity": start_equity,
             "end_equity": end_equity,
-            "week_return_pct": week_return_pct,
+            "window_return_pct": window_return_pct,
             "max_drawdown_pct": max_drawdown,
             "cycles": len(metadata_events),
             "trade_cycles": len(trade_cycles),
@@ -1125,9 +1127,9 @@ class ReportManager:
             "historical_research_feedback_strength": float(self.config.historical_research_feedback_strength),
         }
         recommended = dict(current)
-        reasons = {key: "Kept stable: metrics are mixed this week." for key in current}
+        reasons = {key: "Kept stable: metrics are mixed in this evaluation window." for key in current}
 
-        week_return = float(metrics.get("week_return_pct", 0.0) or 0.0)
+        window_return = float(metrics.get("window_return_pct", 0.0) or 0.0)
         max_drawdown = float(metrics.get("max_drawdown_pct", 0.0) or 0.0)
         no_trade_ratio = (
             float(metrics["no_trade_ratio"])
@@ -1149,15 +1151,15 @@ class ReportManager:
         if sample_gate_active:
             for key in reasons:
                 reasons[key] = (
-                    "Insufficient weekly samples for safe adjustment (need >=6 resolved calls or >=6 generated LLM plans)."
+                    "Insufficient samples for safe adjustment (need >=6 resolved calls or >=6 generated LLM plans)."
                 )
         else:
             drawdown_limit = self._clamp(float(self.config.quarterly_goal_max_drawdown_pct), 0.0, 1.0)
             risk_stress = max_drawdown > drawdown_limit or (
                 bad_call_rate is not None and bad_call_rate >= 0.60
             )
-            stable_week = (
-                week_return >= 0.02
+            stable_window = (
+                window_return >= 0.05
                 and max_drawdown <= max(0.02, drawdown_limit * 0.75)
                 and (bad_call_rate is None or bad_call_rate <= 0.45)
             )
@@ -1209,9 +1211,9 @@ class ReportManager:
                     0.25,
                 )
                 reasons["historical_research_feedback_strength"] = (
-                    "Reduced slightly to avoid overfitting weekly noise."
+                    "Reduced slightly to avoid overfitting short-term noise."
                 )
-            elif stable_week:
+            elif stable_window:
                 recommended["llm_first_min_confidence"] = self._clamp(
                     recommended["llm_first_min_confidence"] - 0.02,
                     0.25,
@@ -1278,7 +1280,7 @@ class ReportManager:
                         0.20,
                     )
                     reasons["decision_learning_rate"] = (
-                        "Raised slightly to increase adaptation speed in low-activity weeks."
+                        "Raised slightly to increase adaptation speed in low-activity windows."
                     )
                 if bad_call_rate is not None and bad_call_rate > 0.50:
                     recommended["llm_first_min_confidence"] = self._clamp(
@@ -1363,9 +1365,10 @@ class ReportManager:
         )
         return layer_rows
 
-    def build_layer_reevaluation_payload(self, end_date: date) -> dict[str, Any] | None:
-        start_date = end_date - timedelta(days=6)
-        metrics = self._evaluate_layer_window(start_date=start_date, end_date=end_date)
+    def build_layer_reevaluation_payload(self, next_quarter_start: date) -> dict[str, Any] | None:
+        evaluation_end = next_quarter_start - timedelta(days=1)
+        evaluation_start = self._quarter_start_for(evaluation_end)
+        metrics = self._evaluate_layer_window(start_date=evaluation_start, end_date=evaluation_end)
         if metrics is None:
             return None
 
@@ -1377,9 +1380,9 @@ class ReportManager:
             else {}
         )
         comparison = {
-            "week_return_pct_delta": self._metric_delta(
-                float(metrics.get("week_return_pct", 0.0) or 0.0),
-                previous_metrics.get("week_return_pct"),
+            "window_return_pct_delta": self._metric_delta(
+                float(metrics.get("window_return_pct", 0.0) or 0.0),
+                previous_metrics.get("window_return_pct", previous_metrics.get("week_return_pct")),
             ),
             "max_drawdown_pct_delta": self._metric_delta(
                 float(metrics.get("max_drawdown_pct", 0.0) or 0.0),
@@ -1412,14 +1415,18 @@ class ReportManager:
         }
 
         prefix = self.config.report_subject_prefix.strip() or "AI Trader"
+        quarter_index = self._quarter_index(next_quarter_start)
         subject = (
-            f"[{prefix}] Layer Reevaluation Report - "
-            f"{start_date.isoformat()} to {end_date.isoformat()}"
+            f"[{prefix}] Layer Reevaluation Report - Prep for Q{quarter_index} "
+            f"{next_quarter_start.year}"
         )
 
         lines: list[str] = []
         lines.append(
-            f"Layer reevaluation for {start_date.isoformat()} through {end_date.isoformat()} (report timezone)."
+            f"Layer reevaluation for next quarter start {next_quarter_start.isoformat()}."
+        )
+        lines.append(
+            f"Evaluation window: {metrics['evaluation_start']} through {metrics['evaluation_end']} (report timezone)."
         )
         lines.append(
             "Policy: bounded adjustments only, one review window at a time, and no automatic changes to hard guardrails."
@@ -1428,7 +1435,7 @@ class ReportManager:
         lines.append("Observed performance:")
         lines.append(
             f"- Equity: ${float(metrics['start_equity']):,.2f} -> ${float(metrics['end_equity']):,.2f} "
-            f"({float(metrics['week_return_pct']) * 100:+.2f}%)"
+            f"({float(metrics['window_return_pct']) * 100:+.2f}%)"
         )
         lines.append(f"- Max drawdown: {float(metrics['max_drawdown_pct']) * 100:.2f}%")
         lines.append(
@@ -1460,9 +1467,9 @@ class ReportManager:
                 f"({float(metrics['no_trade_ratio']) * 100:.1f}%)"
             )
         lines.append("")
-        lines.append("Week-over-week deltas:")
+        lines.append("Results vs previous layer reevaluation:")
         lines.append(
-            f"- Return delta: {comparison['week_return_pct_delta']:+.4f}, "
+            f"- Return delta: {comparison['window_return_pct_delta']:+.4f}, "
             f"drawdown delta: {comparison['max_drawdown_pct_delta']:+.4f}, "
             f"bad-call delta: {comparison['bad_call_rate_delta']:+.4f}, "
             f"LLM usage delta: {comparison['llm_usage_rate_delta']:+.4f}, "

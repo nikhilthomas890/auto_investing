@@ -331,8 +331,8 @@ class ReportingTests(unittest.TestCase):
     def test_layer_reevaluation_report_is_generated_with_recommendations(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = self._config(tmp_dir)
-            config.weekly_report_day_local = "FRI"
-            config.weekly_report_hour_local = 18
+            config.quarterly_model_advisor_reminder_days = 14
+            config.quarterly_model_advisor_hour_local = 18
             manager = ReportManager(config)
 
             for ts, equity in (
@@ -369,8 +369,8 @@ class ReportingTests(unittest.TestCase):
                     '{"event":"decision_call_resolved","timestamp":"2026-02-16T18:00:00+00:00","outcome":"bad_call","why_bad":["ai_thesis_miss"]}\n'
                 )
 
-            # Friday Feb 20, 2026 18:05 ET.
-            manager.maybe_send_scheduled_reports(now=datetime(2026, 2, 20, 23, 5, tzinfo=timezone.utc))
+            # 14 days before 2026-04-01 at 6:05 PM ET.
+            manager.maybe_send_scheduled_reports(now=datetime(2026, 3, 18, 22, 5, tzinfo=timezone.utc))
 
             rows = [
                 json.loads(line)

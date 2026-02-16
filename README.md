@@ -285,7 +285,7 @@ Dashboard pages:
 - Portfolio: current holdings and open call positions
 - Research Feed: daily news/filings/transcripts/social/analyst items with summary, key points, and source link
 - Reports: tabbed daily/weekly/quarterly/roadmap/bootstrap reports
-- Reports include weekly Layer Reevaluation guidance for L0-L4 learning layers
+- Reports include quarterly Layer Reevaluation guidance for L0-L4 learning layers
 - To-Do: create/manage implementation backlog items (add, complete, delete) directly from dashboard
 - System Logs: live runtime log view
 - Control Center: submit runtime decisions (value updates, model build requests, restart/redeploy requests) and view action results
@@ -307,6 +307,7 @@ Configure scheduling/report generation:
 - `ENABLE_BOOTSTRAP_OPTIMIZATION_REPORTS=true`
 - `BOOTSTRAP_OPTIMIZATION_HOUR_LOCAL=18`
 - `ENABLE_LAYER_REEVALUATION_REPORTS=true`
+  - Layer reevaluation runs on the quarterly advisor cadence (`QUARTERLY_MODEL_ADVISOR_REMINDER_DAYS` / `QUARTERLY_MODEL_ADVISOR_HOUR_LOCAL`)
 
 Configure dashboard:
 
