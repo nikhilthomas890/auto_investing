@@ -186,19 +186,33 @@
       ]
     },
     {
-      "id": "cloud-deployment-remote-runtime",
-      "title": "Cloud Deployment + Remote Runtime Execution",
+      "id": "cloud-deployment-setup",
+      "title": "Cloud Deployment Setup (Bot + Dashboard)",
       "priority": "P1",
       "status": "planned",
       "category": "Infrastructure",
       "target_window": "Immediate infrastructure sprint",
-      "estimate_codex": "1-3 days",
-      "summary": "Deploy bot/dashboard to cloud and run all ongoing operations from cloud server instead of local laptop.",
+      "estimate_codex": "1-2 days",
+      "summary": "Provision and secure cloud infrastructure for the bot and dashboard with persistent runtime state.",
       "details": [
-        "Provision cloud host with persistent volumes and systemd-managed bot service.",
-        "Configure secure dashboard access (domain, TLS, firewall, auth) and rotate secrets.",
-        "Set deploy/restart hooks (`CONTROL_REDEPLOY_COMMAND`) so dashboard actions redeploy on server.",
-        "Validate 24/7 research-soak runtime on cloud with local laptop fully disconnected."
+        "Provision cloud VM and persistent storage for logs/state.",
+        "Install systemd service for bot process supervision and restart behavior.",
+        "Configure secure dashboard access (domain, TLS, firewall, auth) and secret management."
+      ]
+    },
+    {
+      "id": "remote-runtime-operations",
+      "title": "Remote Runtime Operations and Handoff",
+      "priority": "P1",
+      "status": "planned",
+      "category": "Operations",
+      "target_window": "Immediate infrastructure sprint",
+      "estimate_codex": "0.5-1 day",
+      "summary": "Run the bot from cloud continuously and remove dependency on the local laptop for execution.",
+      "details": [
+        "Set deploy/restart hooks (`CONTROL_REDEPLOY_COMMAND`) so dashboard actions run on server.",
+        "Validate 24/7 research-soak execution with local machine fully disconnected.",
+        "Document operating runbook for remote updates, monitoring, and recovery."
       ]
     },
     {
